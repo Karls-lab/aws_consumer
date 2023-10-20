@@ -9,14 +9,15 @@ Specifically, this Consumer program will read objects (Widget Requests) from an 
 Widget creation, update, or deletion in either another S3 bucket (Bucket 3) or in a DynamoDB
 table.
 """
-# example command to run producer: java -jar consumer.jar -rb usu-cs5250-quartz-requests -dwt widgets
-
 import argparse
 import boto3
 import time
 import json
 import logging
 import os
+
+# Configure Logging
+logging.basicConfig(filename='logs/consumer.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 """
@@ -74,9 +75,9 @@ def get_session(aws_creds: dict, bucket_name: str):
         region_name='us-east-1'
     )
     if does_dynamo_table_exist(bucket_name, 'us-east-1'):
-        return session.client('dynamodb')
+        return session.client('dynamodb'), True 
     elif does_s3_bucket_exist(bucket_name, 'us-east-1'):
-        return session.client('s3')
+        return session.client('s3'), False
 
 
 # Downloads the bucket data and decodes it into a dictionary
@@ -104,30 +105,38 @@ def processOtherAttributes(attributes):
     return returnDict
 
 
+# Main loop to run the consumer
 def run(session, sourceBucket, destBucket, dynamoTable=None):
     requestQueue = []
-    stop_times = 10
+    stop_times = 10 # will retry to populate queue 10 times before stopping program 
 
     while True:
         # if no more requests, check if there are more to process
         if len(requestQueue) == 0:
+            requests = []
             try:
-                requests = session.list_objects(Bucket=sourceBucket)
+                if dynamoTable:
+                    logging.info("Scanning dynamoDB table")
+                    requests = session.scan(TableName=destBucket)
+                    requests = requests['Items']
+                else:
+                    logging.info("Listing objects in bucket")
+                    requests = session.list_objects(Bucket=sourceBucket)
             except Exception as e:
-                print(f"Error: {e}")
+                logging.ERROR(f"Error: {e}")
             if 'Contents' not in requests:
                 pass
-            else:
-                # sort widgets with smallest key first and ad to queue 
+            else: # sort widgets with smallest key first and ad to queue 
                 requestQueue = sorted(requests['Contents'], key=lambda x: x['Key'])
             time.sleep(0.1)  # Wait for 100ms
 
-        # if no more requests, end program 
+        # if no more requests, end program after 10 tries 
         if len(requestQueue) == 0:
-            print("Done! No more requests to process")
+            logging.info("Done! No more requests to process")
             stop_times -= 1
             if stop_times == 0:
                 print("Stopping program")
+                logging.info("Stopping program\n\n\n")
                 break
             continue
 
@@ -136,6 +145,7 @@ def run(session, sourceBucket, destBucket, dynamoTable=None):
 
         # Download the request from S3 bucket2 and decode it into a dict
         requestKey = request['Key']
+        logging.info(f"\nDownloading request: {requestKey}")
         jsonData = downloadBucket(session, sourceBucket, requestKey)
 
         # delete the request from the bucket
@@ -143,30 +153,31 @@ def run(session, sourceBucket, destBucket, dynamoTable=None):
 
         # get the type of request
         requestType = jsonData['type']
+        logging.info(f"Request type: {requestType}")
 
         # Logic to create widget to s3 or dynamoDB
         if requestType == 'create':
             data = processData(jsonData)
             requestKey = f"widgets/{data['owner']}/{jsonData['requestId']}"
-            print(f"Creating a new widget with id: {jsonData['requestId']}")
-            if dynamoTable != None:
+            logging.info(f"Creating a new widget with id: {jsonData['requestId']}")
+            if dynamoTable:
                 data['otherAttributes'] = processOtherAttributes(data['otherAttributes'])
                 session.put_item(TableName=dynamoTable, Item=data)
             else: 
                 session.put_object(Bucket=destBucket, Key=requestKey, Body=json.dumps(data))
 
         elif requestType == 'update':
-            print("Updating a widget")
+            logging.info("Updating a widget")
 
         elif requestType == 'delete':
-            print("Deleting a widget")
+            logging.info("Deleting a widget")
 
 
 
 def run_consumer(sourceBucket='usu-cs5250-quartz-requests', destinationBucket='usu-cs5250-quartz-web'):
     creds = get_aws_creds()
-    session = get_session(creds, destinationBucket)
-    run(session, sourceBucket, destinationBucket)
+    session, dynamoTF = get_session(creds, destinationBucket)
+    run(session, sourceBucket, destinationBucket, dynamoTF)
 
 
 if __name__ == '__main__':
@@ -179,9 +190,13 @@ if __name__ == '__main__':
     resources_to_use = args.widget_bucket
 
     # Run consumer with args
-    run_consumer(storage_strategy, resources_to_use)
+    try:
+        run_consumer(storage_strategy, resources_to_use)
+    except Exception as e:
+        logging.error(f"Error: {e}")
 
 """
 Example command: python3 consumer.py -rb usu-cs5250-quartz-requests -wb usu-cs5250-quartz-web
+Example with Dynamo: python3 consumer.py -rb usu-cs5250-quartz-requests -wb widgets 
 Example producer command: java -jar producer.jar --request-bucket=usu-cs5250-quartz-requests
 """
