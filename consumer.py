@@ -8,6 +8,7 @@ Oct 20 2023
 """
 import argparse
 import boto3
+from botocore.exceptions import NoCredentialsError
 import time
 import json
 import logging
@@ -46,19 +47,27 @@ def get_aws_creds():
 Functions to determine if bucket is an s3 or dynamo table
 """
 def does_s3_bucket_exist(bucket_name, region_name):
-    s3 = boto3.client('s3', region_name=region_name)
     try:
+        s3 = boto3.client('s3', region_name=region_name)
         s3.head_bucket(Bucket=bucket_name)
         return True
-    except s3.exceptions.ClientError as e:
-        return False
+    except NoCredentialsError:
+        return False  
+    except Exception as e:
+        return False  
+
 
 def does_dynamo_table_exist(table_name, region_name):
-    dynamodb = boto3.client('dynamodb', region_name=region_name)
     try:
-        dynamodb.describe_table(TableName=table_name)
-        return True
-    except dynamodb.exceptions.ResourceNotFoundException:
+        dynamodb = boto3.client('dynamodb', region_name=region_name)
+        response = dynamodb.describe_table(TableName=table_name)
+        response = dict(response)
+        if response.items():
+            return True
+        return False
+    except NoCredentialsError:
+        return False
+    except Exception as e:
         return False
 
 
