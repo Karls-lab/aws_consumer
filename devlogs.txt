@@ -1,4 +1,0 @@
-When a widget needs to be stored in the DynamoTable, place every widget attribute in the
-request its own attribute in the DynamoDB object. In other words, in addition to the widget_id,
-owner, label, and description, all the properties listed in the otherAttributes properties need to
-be stored as attributes in the DynamoDB object and not as single map or list.
