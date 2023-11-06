@@ -19,3 +19,10 @@ USAGE:
 LOGS:
     Logs are saved in the logs directory.
     Logs are track each request, it's type, and it's ID 
+
+
+DOCKER GUIDE:
+    To pass the AWS credentials to the docker container,
+    use this command: 
+        sudo docker build -t consumer:2.3 .
+        sudo docker run consumer:2.3

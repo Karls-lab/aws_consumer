@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from consumer import (
+from src.consumer import (
     convert_dict_to_dynamodb_format,
     does_s3_bucket_exist,
     does_dynamo_table_exist,
