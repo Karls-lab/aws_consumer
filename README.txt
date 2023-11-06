@@ -26,3 +26,6 @@ DOCKER GUIDE:
     use this command: 
         sudo docker build -t consumer:2.3 .
         sudo docker run consumer:2.3
+
+
+
