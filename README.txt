@@ -25,7 +25,7 @@ DOCKER GUIDE:
     To pass the AWS credentials to the docker container,
     use this command: 
         sudo docker build -t consumer:2.3 .
-        sudo docker run consumer:2.3
+        sudo docker run --env-file creds.env consumer:2.3
 
 
 
