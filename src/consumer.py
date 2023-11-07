@@ -36,20 +36,19 @@ logging.getLogger().addHandler(console_handler)  # Add the console handler to th
 Processes json data, removes some fields
 """
 def processData(data):
-    returnDict = {}
-    returnDict['id'] = data['widgetId']
-    returnDict['owner'] = data['owner'].replace(" ", "-").lower()
-    returnDict['description'] = data['description']
-    returnDict['otherAttributes'] = data['otherAttributes']
-    return returnDict
+    data['id'] = data['widgetId']
+    data['owner'] = data['owner'].replace(" ", "-").lower()
+    del data['requestId']
+    return data 
 
 
 """
 Create, Update, and Delete widget functions
 """
 def create_widget(data, dest_session, destBucket, dynamoProcessor):
-    requestKey = f"widgets/{data['owner']}/{data['requestId']}"
-    logging.info(f"Creating a new widget with id: {data['requestId']}")
+    data = processData(data)
+    requestKey = f"widgets/{data['owner']}/{data['widgetId']}"
+    logging.info(f"Creating a new widget with id: {data['widgetId']}")
 
     if dest_session.meta.service_model.service_name == "dynamodb":
         processed_data = dynamoProcessor.processData(data)
@@ -58,26 +57,42 @@ def create_widget(data, dest_session, destBucket, dynamoProcessor):
         dest_session.put_object(Bucket=destBucket, Key=requestKey, Body=json.dumps(data))
 
 
+from decimal import Decimal  # Import Decimal for handling Decimal types
+
 def update_widget(data, dest_session, destBucket, dynamoProcessor):
-    widget_id = data['widgetId']
+    processed_data = processData(data)  # Avoid overwriting the input data
+    
+    widget_id = processed_data['widgetId']
     logging.info(f"Updating a widget with ID: {widget_id}")
 
     if dest_session.meta.service_model.service_name == "dynamodb":
-        key = {'widgetId': {'S': widget_id}}
-        dest_session.update_item(TableName="widgets", Key=key, UpdateExpression='SET ...')
+        dynamo_data = dynamoProcessor.processData(data)  # Correct the variable name
+        key = {'id': {'S': widget_id}}  # Ensure the key format matches the primary key in DynamoDB
+        update_expression, expression_attribute_values, expression_attribute_names = dynamoDBProcessor.getUpdateExpression(dynamo_data)
+
+        dest_session.update_item(
+            TableName="widgets",
+            Key=key,
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values,
+            ExpressionAttributeNames=expression_attribute_names
+        )
+    
     else:
-        data_bytes = bytes(json.dumps(data), 'utf-8')
-        dest_session.put_object(Bucket=destBucket, Key=f"widgets/{data['owner']}/{widget_id}", Body=data_bytes)
+        data_bytes = bytes(json.dumps(processed_data), 'utf-8')
+        dest_session.put_object(Bucket=destBucket, Key=f"widgets/{processed_data['owner']}/{widget_id}", Body=data_bytes)
 
 
 def delete_widget(data, dest_session, destBucket):
-    widget_id = data['widgetId']
+    processed_data = processData(data)
+    widget_id = processed_data['widgetId']
     logging.info(f"Deleting a widget with ID: {widget_id}")
 
     if dest_session.meta.service_model.service_name == "dynamodb":
-        dest_session.delete_item(TableName="widgets", Key={'widgetId': widget_id})
+        key = {'id': {'S': widget_id}}  # Ensure the key format matches the primary key in DynamoDB
+        dest_session.delete_item(TableName="widgets", Key=key)
     else:
-        dest_session.delete_object(Bucket=destBucket, Key=f"widgets/{data['owner']}/{widget_id}")
+        dest_session.delete_object(Bucket=destBucket, Key=f"widgets/{processed_data['owner']}/{widget_id}")
 
 
 
@@ -117,9 +132,9 @@ def run(source_session, sourceBucket, dest_session, destBucket, dynamoTable=None
         logging.info(f"Request type: {requestType}")
 
         if requestType == 'create':
-            create_widget(processData(jsonData), dest_session, destBucket, dynamoDBProcessor())
+            create_widget(jsonData, dest_session, destBucket, dynamoDBProcessor())
         elif requestType == 'update':
-            update_widget(processData(jsonData), dest_session, destBucket, dynamoDBProcessor())
+            update_widget(jsonData, dest_session, destBucket, dynamoDBProcessor())
         elif requestType == 'delete':
             delete_widget(jsonData, dest_session, destBucket)
 
@@ -204,7 +219,7 @@ Example consumer SQS command:
 Example consumer SQS command (dynamo): 
     python3 consumer.py -q https://sqs.us-east-1.amazonaws.com/850320733371/cs5260-requests -wb widgets
 Example producer command: 
-    java -jar producer.jar --request-bucket=usu-cs5250-quartz-requests
+    java -jar producer.jar --request-bucket=usu-cs5250-quartz-requests -mwr 20
 Example producer with 100 requests:
-    java -jar producer.jar --request-bucket=usu-cs5250-quartz-requests -mwr=100
+    java -jar producer.jar --request-bucket=usu-cs5250-quartz-requests -mwr 100
 """

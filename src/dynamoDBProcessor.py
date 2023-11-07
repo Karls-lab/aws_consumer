@@ -16,8 +16,16 @@ class dynamoDBProcessor():
         for attribute in data["otherAttributes"]:
             returnDict[attribute['name']] = attribute['value']
         data.pop('otherAttributes')
+        
+        for key in list(data.keys()):  # Iterate over a copy of the keys to avoid changing the dictionary size during iteration
+            new_key = key.replace('-', '_')  # Replace hyphens with underscores
+            if new_key != key:
+                data[new_key] = data.pop(key)  # Update key if there's a replacement
+        
         for key in returnDict:
-            data[key] = returnDict[key]
+            new_key = key.replace('-', '_')  # Replace hyphens with underscores for new keys
+            data[new_key] = returnDict[key]
+
         return self.convert_dict_to_dynamodb_format(data)
 
 
@@ -48,4 +56,29 @@ class dynamoDBProcessor():
             return False
         except Exception as e:
             return False
+        
+    
+    def getUpdateExpression(data):
+        update_expression = 'SET '
+        expression_attribute_values = {}
+        expression_attribute_names = {}
+
+        # Construct the update expression excluding 'owner'
+        for key, value in data.items():
+            if key == 'type':  # Check for the reserved keyword 'type'
+                expression_attribute_names['#widgetType'] = 'type'  # Using ExpressionAttributeNames for the reserved keyword
+                update_expression += "#widgetType = :widgetType, "
+                expression_attribute_values[":widgetType"] = value
+            elif key == 'owner':  # Check for the reserved keyword 'owner'
+                expression_attribute_names['#widgetOwner'] = 'owner'  # Using ExpressionAttributeNames for the reserved keyword
+                update_expression += "#widgetOwner = :widgetOwner, "
+                expression_attribute_values[":widgetOwner"] = value
+            elif key != 'id':  # Exclude 'widgetId' from the update expression
+                update_expression += f"#{key} = :{key}, "
+                expression_attribute_values[f":{key}"] = value
+                expression_attribute_names[f"#{key}"] = key
+
+        update_expression = update_expression[:-2]  # Remove the trailing comma and space
+
+        return update_expression, expression_attribute_values, expression_attribute_names
 

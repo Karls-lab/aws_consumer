@@ -29,3 +29,23 @@ DOCKER GUIDE:
 
 
 
+Example command: 
+    python3 consumer.py -rb usu-cs5250-quartz-requests -wb usu-cs5250-quartz-web
+
+Example with Dynamo: 
+    python3 consumer.py -rb usu-cs5250-quartz-requests -wb widgets 
+
+Example consumer SQS command: 
+    python3 consumer.py -q https://sqs.us-east-1.amazonaws.com/850320733371/cs5260-requests -wb usu-cs5250-quartz-web
+
+Example consumer SQS command (dynamo): 
+    python3 consumer.py -q https://sqs.us-east-1.amazonaws.com/850320733371/cs5260-requests -wb widgets
+
+Example producer command: 
+    java -jar producer.jar --request-bucket=usu-cs5250-quartz-requests -mwr 20
+
+Example producer with 100 requests:
+    java -jar producer.jar --request-bucket=usu-cs5250-quartz-requests -mwr 100
+
+Example producer populate SQS: 
+    java -jar producer.jar -rq https://sqs.us-east-1.amazonaws.com/850320733371/cs5260-requests -mwr 100
